@@ -13,8 +13,14 @@ jobs:
 
       - name: Descompactar projeto Android
         run: |
-          unzip -o IPTVPlayer-Android-Project.zip -d project
-          find project -maxdepth 3 -type f | head -50
+          rm -rf project
+          mkdir project
+          unzip -q IPTVPlayer-Android-Project.zip -d project
+
+      - name: Mostrar estrutura do projeto
+        run: |
+          echo "Arquivos encontrados:"
+          find project -maxdepth 5 -type f | sort | head -200
 
       - name: Configurar Java
         uses: actions/setup-java@v4
@@ -22,33 +28,52 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
       - name: Encontrar projeto Gradle
+        id: gradle_project
+        shell: bash
         run: |
-          find project -name settings.gradle -o -name settings.gradle.kts
+          SETTINGS=$(find project -type f \( \
+            -name "settings.gradle" \
+            -o -name "settings.gradle.kts" \
+          \) | head -1)
 
-         - name: Localizar projeto Android
+          if [ -z "$SETTINGS" ]; then
+            echo "ERRO: settings.gradle não encontrado!"
+            echo "Estrutura encontrada:"
+            find project -maxdepth 6 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+
+          echo "Projeto Gradle encontrado em:"
+          echo "$PROJECT_DIR"
+
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar Gradle
+        working-directory: ${{ steps.gradle_project.outputs.project_dir }}
         run: |
-          echo "Procurando settings.gradle..."
-          find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \)
+          if [ ! -f "./gradlew" ]; then
+            echo "gradlew não encontrado. Criando wrapper..."
+            gradle wrapper --gradle-version 8.9
+          fi
+
+          chmod +x ./gradlew
 
       - name: Gerar APK
+        working-directory: ${{ steps.gradle_project.outputs.project_dir }}
         run: |
-          PROJECT_DIR=$(dirname "$(find project -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -1)")
-          echo "Projeto encontrado em: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Procurar APK
         run: |
-          find project -type f -name "*.apk"
+          echo "APKs encontrados:"
+          find project -type f -name "*.apk" -print
 
       - name: Salvar APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: project/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
