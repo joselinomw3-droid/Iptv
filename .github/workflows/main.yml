@@ -31,14 +31,21 @@ jobs:
         run: |
           find project -name settings.gradle -o -name settings.gradle.kts
 
-      - name: Gerar APK
-        working-directory: project
+         - name: Localizar projeto Android
         run: |
+          echo "Procurando settings.gradle..."
+          find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \)
+
+      - name: Gerar APK
+        run: |
+          PROJECT_DIR=$(dirname "$(find project -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -1)")
+          echo "Projeto encontrado em: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
           gradle assembleDebug
 
       - name: Procurar APK
         run: |
-          find project -name "*.apk"
+          find project -type f -name "*.apk"
 
       - name: Salvar APK
         uses: actions/upload-artifact@v4
